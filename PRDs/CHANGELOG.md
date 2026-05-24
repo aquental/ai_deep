@@ -10,7 +10,9 @@
 - [x] `20260524_1639_prd_estrutura_diretorios_revisado.md`
 - [x] `20260524_1650_prd_modulo_logging_robusto.md`
 - [x] `20260524_1710_prd_listagem_arquivos_diretorio_hrns.md`
-- [ ] `20260524_1826_prd_textual_hrns.md`
+- [x] `20260524_1826_prd_textual_hrns.md`
+- [ ] `20260524_1911_prd_chatStatusPanel.md`
+- [ ] `20260524_1919_prd_persistencia_historico_chat_hrns.md`
 
 ---
 
@@ -107,6 +109,7 @@
 
 ---
 
+### `20260524_1710_prd_listagem_arquivos_diretorio_hrns.md`
 
 **Descrição:** Função genérica `list_files(directory)` para listar arquivos dos diretórios de configuração `.hrns/skills`, `.hrns/hooks` e `.hrns/contexts`.
 
@@ -147,3 +150,81 @@
 - `tests/test_discovery.py`
 
 ---
+
+### `20260524_1826_prd_textual_hrns.md`
+
+**Descrição:** Interface TUI baseada em Textual com layout de quatro janelas fixas (conversacional, status, tarefas, trabalho).
+
+**Status:** ✅ Implementado
+
+#### O que foi implementado:
+
+- Adição da dependência `textual>=2.0.0` em `pyproject.toml`
+- Função `validate_terminal_size()` em `src/hrns/tui/validate.py` — valida altura mínima de 20 linhas
+- Função `run_tui()` — entry point que valida o terminal e lança a aplicação Textual
+- `HrnsApp` em `src/hrns/tui/app.py` — aplicação principal com layout CSS em grade
+- Quatro painéis modulares em `src/hrns/tui/widgets/`:
+  - `ConversationalPanel` — painel `RichLog` para exibição de conversa (70% largura × 70% altura)
+  - `StatusPanel` — painel com campo `Input` para entrada do usuário (70% largura × 30% altura)
+  - `TasksPanel` — painel reservado para tarefas (30% largura × 50% altura)
+  - `WorkPanel` — painel reservado para logs e contexto (30% largura × 50% altura)
+- Layout proporcional: coluna esquerda (70/30 vertical), coluna direita (50/50 vertical), divisão horizontal (70/30)
+- Bordas com títulos em cada painel para distinção visual
+- Submissão de input: texto digitado no `StatusPanel` é exibido no `ConversationalPanel`
+- Atalho `Ctrl+Q` para sair da aplicação
+- `__init__.py` do módulo `hrns.tui` exporta `run_tui`
+- 13 testes em `tests/test_tui.py` cobrindo validação de terminal, widgets e composição
+
+#### Implementação — Módulo src/hrns/tui/:
+
+- `validate.py` — `validate_terminal_size()`, `run_tui()`, constante `MIN_TERMINAL_LINES = 20`
+- `app.py` — `HrnsApp(App)` com CSS inline definindo layout horizontal/vertical com `fr` units
+- `widgets/conversational.py` — `ConversationalPanel(RichLog)` com `BORDER_TITLE = "Conversacional"`
+- `widgets/status.py` — `StatusPanel(Static)` com composição de `Input` (`id="status-input"`)
+- `widgets/tasks.py` — `TasksPanel(Static)` com `BORDER_TITLE = "Tarefas"`
+- `widgets/work.py` — `WorkPanel(Static)` com `BORDER_TITLE = "Trabalho"`
+- `widgets/__init__.py` — exporta todos os painéis
+- `__init__.py` — exporta `run_tui`
+
+#### Testes — 13 cenários em tests/test_tui.py:
+
+- Terminal acima do mínimo não levanta exceção
+- Terminal no mínimo não levanta exceção
+- Terminal abaixo do mínimo levanta `SystemExit(1)`
+- Mensagem de erro é exibida quando terminal é pequeno demais
+- Constante `MIN_TERMINAL_LINES` é 20
+- `ConversationalPanel` instancia com título correto
+- `StatusPanel` instancia com título correto
+- `TasksPanel` instancia com título correto
+- `WorkPanel` instancia com título correto
+- `HrnsApp` instancia sem erro
+- `HrnsApp.compose()` produz widgets
+- `HrnsApp` possui binding `ctrl+q`
+- CSS contém proporções `7fr` / `3fr`
+- `run_tui()` valida terminal antes de lançar app
+
+#### Arquivos relacionados:
+
+- `pyproject.toml` (atualizado com `textual>=2.0.0`)
+- `src/hrns/tui/__init__.py`
+- `src/hrns/tui/app.py`
+- `src/hrns/tui/validate.py`
+- `src/hrns/tui/widgets/__init__.py`
+- `src/hrns/tui/widgets/conversational.py`
+- `src/hrns/tui/widgets/status.py`
+- `src/hrns/tui/widgets/tasks.py`
+- `src/hrns/tui/widgets/work.py`
+- `tests/test_tui.py`
+
+#### Critérios de aceitação atendidos:
+
+- ✅ Impede execução com terminal < 20 linhas
+- ✅ Mensagem de erro clara
+- ✅ Interface ocupa 100% do terminal
+- ✅ `conversacional`: 70% largura × 70% altura
+- ✅ `status`: 70% largura × 30% altura, abaixo do conversacional
+- ✅ `tarefas`: 30% largura × 50% altura, topo direito
+- ✅ `trabalho`: 30% largura × 50% altura, abaixo de tarefas
+- ✅ Input principal no painel `status`
+- ✅ Saída da conversa no painel `conversacional`
+- ✅ Quatro janelas visíveis simultaneamente
