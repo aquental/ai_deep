@@ -10,6 +10,7 @@
 - [x] `20260524_1639_prd_estrutura_diretorios_revisado.md`
 - [x] `20260524_1650_prd_modulo_logging_robusto.md`
 - [x] `20260524_1710_prd_listagem_arquivos_diretorio_hrns.md`
+- [ ] `20260524_1826_prd_textual_hrns.md`
 
 ---
 
@@ -106,7 +107,6 @@
 
 ---
 
-### `20260524_1710_prd_listagem_arquivos_diretorio_hrns.md`
 
 **Descrição:** Função genérica `list_files(directory)` para listar arquivos dos diretórios de configuração `.hrns/skills`, `.hrns/hooks` e `.hrns/contexts`.
 
