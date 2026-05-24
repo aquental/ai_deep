@@ -1,0 +1,12 @@
+[project]
+name = "deepseek-cli"
+version = "0.1.0"
+description = "CLI para chamar a API do DeepSeek via stdin"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.38.0",
+    "python-dotenv>=1.2.2",
+]
+
+[project.scripts]
+deepseek = "main:main"
