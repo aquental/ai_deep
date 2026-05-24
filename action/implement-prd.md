@@ -1,16 +1,46 @@
-O arquivo a ser executado é o `20260524_1826_prd_textual_hrns.md`, e será refrenciado com ARQUIVO.
+## Arquivos
 
-O arquivo ./PRDs/CHANGELOG.md tem uma lista de arquivos PRDs (check boxes) com os respectivos nomes.
-Se o checkbox estiver marcado, o status de implementação deste arquivo deve ser "Implementado".
-Se o checkbox estiver vazio, o status de implementação deste arquivo deve ser "Pendente".
+- **ARQUIVO**: `./PRDs/20260524_1919_prd_persistencia_historico_chat_hrns.md`
+  — o PRD cujas mudanças devem ser implementadas.
+- **CHANGELOG**: `./PRDs/CHANGELOG.md` — índice de PRDs e registro de
+  implementação. Todas as edições de status e registro acontecem AQUI,
+  nunca no ARQUIVO.
 
-Na segunda parte deste arquivo (seção "Parte 2 — Registro de implementação"), há um item para cada arquivo, com a descrição detalhada do que foi feito durante a execução do conteúdo do ARQUIVO.
+## Contexto do CHANGELOG
 
-Caso a seção do arquivo não exista, siga o modelo dos arquivos anteriores (veja: ### <arquivo> e seus subitens).
+O CHANGELOG tem duas partes:
 
-Implemente as mudanças descritas no ARQUIVO.
-Caso todos os testes passem:
+- Uma lista de PRDs com checkboxes. Checkbox marcado = status "Implementado";
+  checkbox vazio = status "Pendente".
+- Uma seção "Parte 2 — Registro de implementação", com uma subseção por PRD
+  (formato `### <nome-do-arquivo>` e subitens) descrevendo o que foi feito.
 
-- atualize o checkbox (para checked) no ARQUIVO
-- crie uma seção `####` com o nome do ARQUIVO
-- atualize a nova seção com o resultado das ações feitas seguindo o modelo das execuções anteriores.
+## Tarefa
+
+1. Implemente as mudanças descritas no ARQUIVO.
+
+2. Adicione testes que validem a implementação. A suíte deve cobrir:
+   - **Casos comuns**: entradas válidas e o fluxo principal de uso.
+   - **Casos extremos** (no mínimo): entradas vazias ou nulas, valores nos
+     limites (mínimo/máximo), entradas inválidas ou malformadas, condições
+     de erro, e coleções com zero, um e muitos elementos.
+     Se algum desses casos não estiver coberto, crie os testes faltantes.
+
+3. Rode a suíte completa de testes.
+
+## Se — e somente se — todos os testes passarem
+
+No arquivo CHANGELOG:
+
+1. Marque o checkbox correspondente ao ARQUIVO na lista de PRDs
+   (status passa a "Implementado").
+2. Na "Parte 2 — Registro de implementação", localize a subseção do ARQUIVO.
+   Se ela não existir, crie-a seguindo o formato das subseções anteriores
+   (`### <nome-do-arquivo>` e seus subitens).
+3. Preencha essa subseção com o registro do que foi feito: mudanças
+   implementadas, testes adicionados e quais casos (comuns/extremos) foram
+   cobertos.
+
+## Se algum teste falhar
+
+Não altere o CHANGELOG. Relate quais testes falharam e por quê.
