@@ -11,13 +11,13 @@ O frontmatter contem tres metadados: `nome`, `description` e `trigger`.
 Implementar um sistema que:
 
 - Leia o frontmatter YAML de cada arquivo no diretorio skills
-- Extraia os metadados `nome`, `description` e `trigger`
+- Extraia os metadados `name`, `description` e `trigger`
 - Exiba o nome do frontmatter ao lado do arquivo na aba skills
 - Lidere com arquivos sem frontmatter ou com metadados faltantes de forma graceful
 
 ## Problema
 
-Sem leitura de frontmatter, os arquivos sao listados apenas pelo nome do arquivo, o que pode nao ser informativo para o usuario. O frontmatter contem metadados estruturados como `nome`, `description` e `trigger` que fornecem contexto adicional sobre o que cada skill faz. Exibir o nome do frontmatter melhora a usabilidade e clareza da interface [cite:68].
+Sem leitura de frontmatter, os arquivos sao listados apenas pelo nome do arquivo, o que pode nao ser informativo para o usuario. O frontmatter contem metadados estruturados como `name`, `description` e `trigger` que fornecem contexto adicional sobre o que cada skill faz. Exibir o nome do frontmatter melhora a usabilidade e clareza da interface [cite:68].
 
 ## Escopo
 
@@ -26,7 +26,7 @@ O sistema deve ler frontmatter de arquivos em `.hrns/skills` e exibir o nome na 
 Inclui:
 
 - Leitura de frontmatter YAML de arquivos markdown ou texto
-- Extraicao dos metadados `nome`, `description` e `trigger`
+- Extraicao dos metadados `name`, `description` e `trigger`
 - Exibicao do nome do frontmatter ao lado do arquivo na aba skills
 - Tratamento de arquivos sem frontmatter
 - Tratamento de metadados faltantes ou invalidos
@@ -54,14 +54,14 @@ O sistema deve ler o frontmatter YAML de cada arquivo no diretorio `.hrns/skills
 
 O frontmatter deve conter pelo menos os metadados:
 
-- `nome`: nome descritivo da skill
+- `name`: nome descritivo da skill
 - `description`: descricao curta da skill
 - `trigger`: tipo de trigger ou gatilho da skill
 
 Exemplo de frontmatter:
 
     ---
-    nome: Carregar Contexto
+    name: Carregar Contexto
     description: Carrega o contexto do projeto para o LLM
     trigger: on_load
     ---
@@ -72,7 +72,7 @@ Exemplo de frontmatter:
 
 Na aba skills, cada arquivo deve ser exibido com o nome do frontmatter ao lado:
 
-    arquivo.py - Nome do Frontmatter
+    arquivo.py - Name no Frontmatter
 
 ### RF4. Lidar com arquivos sem frontmatter
 
@@ -82,7 +82,7 @@ Se um arquivo nao tiver frontmatter, exibir apenas o nome do arquivo:
 
 ### RF5. Lidar com metadados faltantes
 
-Se o frontmatter existir mas o campo `nome` estiver faltando, exibir apenas o nome do arquivo [cite:68].
+Se o frontmatter existir mas o campo `name` estiver faltando, exibir apenas o nome do arquivo [cite:68].
 
 ### RF6. Ordenar arquivos alfabeticamente pelo nome do arquivo
 
@@ -124,14 +124,14 @@ Uso basico:
 
     # Carregar arquivo
     post = frontmatter.load('arquivo.md')
-    nome = post.get('nome', None)
+    name = post.get('name', None)
     description = post.get('description', None)
     trigger = post.get('trigger', None)
     content = post.content
 
     # Ou parsear texto
     metadata, content = frontmatter.parse(texto)
-    nome = metadata.get('nome', None)
+    name = metadata.get('name', None)
 
 ## Funcao list_files do PRD de listagem
 
@@ -168,11 +168,11 @@ def get_skill_display_name(file_path: str) -> str:
             content = f.read()
 
         metadata, _ = frontmatter.parse(content)
-        nome = metadata.get('nome', None)
+        name = metadata.get('name', None)
 
-        if nome:
+        if name:
             file_name = Path(file_path).name
-            return f"{file_name} - {nome}"
+            return f"{file_name} - {name}"
         else:
             return Path(file_path).name
 
@@ -200,18 +200,17 @@ def _create_skills_list(directory: str) -> ComposeResult:
 
 ```yaml
 ---
-nome: Carregar Contexto
+name: Carregar Contexto
 description: Carrega o contexto do projeto para o LLM
 trigger: on_load
 ---
-
 # Conteudo do arquivo de skill...
 ```
 
 ## Criterios de aceitacao
 
 - Cada arquivo em `.hrns/skills` deve ter seu frontmatter lido
-- O metadado `nome` do frontmatter deve ser exibido ao lado do arquivo
+- O metadado `name` do frontmatter deve ser exibido ao lado do arquivo
 - Formato de exibicao: `arquivo.py - Nome do Frontmatter`
 - Arquivos sem frontmatter devem exibir apenas o nome do arquivo
 - Metadados faltantes nao devem causar erro
@@ -248,11 +247,11 @@ def get_skill_display_name(file_path: str) -> str:
             content = f.read()
 
         metadata, _ = frontmatter.parse(content)
-        nome = metadata.get('nome', None)
+        name = metadata.get('name', None)
 
-        if nome:
+        if name:
             file_name = Path(file_path).name
-            return f"{file_name} - {nome}"
+            return f"{file_name} - {name}"
         else:
             return Path(file_path).name
 
@@ -296,7 +295,7 @@ if __name__ == "__main__":
 A revisao aplica as seguintes correcoes e melhorias:
 
 - Garante leitura de frontmatter YAML usando `python-frontmatter` [web:104][web:106]
-- Garante extracao dos metadados `nome`, `description` e `trigger`
+- Garante extracao dos metadados `name`, `description` e `trigger`
 - Garante exibicao do nome ao lado do arquivo na aba skills [cite:68]
 - Garante tratamento de arquivos sem frontmatter graceful [cite:68]
 - Garante uso da funcao `list_files` do PRD de listagem [cite:68]
@@ -317,4 +316,4 @@ Possiveis extensoes futuras:
 - Filtro por `trigger` ou por palavra-chave na `description`
 - Edicao de frontmatter diretamente na interface
 - Validacao de frontmatter obrigatorio para skills
-- sorted por `nome` do frontmatter em vez do nome do arquivo
+- sorted por `name` do frontmatter em vez do nome do arquivo
