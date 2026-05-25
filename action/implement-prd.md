@@ -1,6 +1,6 @@
 ## Arquivos
 
-- **ARQUIVO**: `./PRDs/20260524_1919_prd_persistencia_historico_chat_hrns.md`
+- **ARQUIVO**: `./PRDs/20260524_2102_prd_frontmatter_skills_hrns.md`
   — o PRD cujas mudanças devem ser implementadas.
 - **CHANGELOG**: `./PRDs/CHANGELOG.md` — índice de PRDs e registro de
   implementação. Todas as edições de status e registro acontecem AQUI,

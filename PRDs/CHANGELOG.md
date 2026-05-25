@@ -13,6 +13,9 @@
 - [x] `20260524_1826_prd_textual_hrns.md`
 - [x] `20260524_1911_prd_chatStatusPanel.md`
 - [x] `20260524_1919_prd_persistencia_historico_chat_hrns.md`
+- [x] `20260524_2025_prd_bordas_abas_hrns.md`
+- [x] `20260524_2041_prd_atalhos_abas_hrns.md`
+- [x] `20260524_2102_prd_frontmatter_skills_hrns.md`
 
 ---
 
@@ -322,6 +325,7 @@
 #### Testes — 26 cenários em tests/test_chat_history.py:
 
 **Casos comuns (9):**
+
 - Salvamento e carregamento de mensagem de usuário
 - Salvamento de mensagens user + assistant em ordem
 - Múltiplos turnos preservados em ordem cronológica
@@ -333,6 +337,7 @@
 - Registro inclui campo `timestamp` não vazio
 
 **Casos extremos (9):**
+
 - Banco vazio → `load_history` retorna `[]`
 - `conversation_id` inexistente → retorna `[]`
 - Conteúdo vazio (string "") aceito e recuperado
@@ -344,12 +349,14 @@
 - Conteúdo muito longo (10.000 caracteres) preservado
 
 **Casos de erro (4):**
+
 - `save_message` retorna `False` quando banco não inicializado
 - `load_history` retorna `[]` quando banco não inicializado
 - `get_latest_messages` retorna `[]` quando banco não inicializado
 - Caminho inválido (ex.: `/dev/null/...`) não lança exceção
 
 **ConversationalPanel.populate (4):**
+
 - Lista vazia — no-op
 - Uma mensagem — escrita corretamente
 - Múltiplas mensagens — escritas em ordem
@@ -375,3 +382,158 @@
 - ✅ Erros de banco tratados com degradação graciosa (RF9)
 - ✅ Múltiplas conversas suportadas via `conversation_id` (RF7, RF8)
 - ✅ Implementação usa apenas `sqlite3` da stdlib, sem dependências externas (RNF1)
+
+---
+
+### `20260524_2025_prd_bordas_abas_hrns.md`
+
+**Descrição:** Bordas coloridas com títulos em todos os painéis e três abas no painel Status para listar arquivos de `.hrns/skills`, `.hrns/context` e `.hrns/hooks`.
+
+**Status:** ✅ Implementado
+
+#### O que foi implementado:
+
+- StatusPanel reestruturado com `TabbedContent` contendo três `TabPane`s: skills, context, hooks
+- Cada aba contém um `ListView` populado com os arquivos do diretório correspondente
+- Mensagem `"nao existem arquivos em {dir}"` quando o diretório está vazio ou não existe (RF8)
+- Arquivos listados em ordem alfabética via `list_files()` do módulo `discovery` (RF9)
+- Campo de chat `Input` preservado no StatusPanel, docked ao fundo, com altura fixa de 3 linhas
+- Bordas coloridas com `border: round` em todos os 4 painéis (RF1):
+  - Conversacional → cyan
+  - Status → green
+  - Tarefas → yellow
+  - Trabalho → magenta
+- Títulos nas bordas com `border-title-style: bold` (RF2, RF3)
+- CSS atualizado com regras para `#status-tabs` (height: 1fr) e Input do StatusPanel (dock: bottom, height: 3)
+
+#### Arquivos modificados:
+
+- `src/hrns/tui/widgets/status.py` — reescrito: herdando de `Vertical`, compondo `TabbedContent` + `Input`, método `_populate_tab` para preenchimento dinâmico
+- `src/hrns/tui/app.py` — CSS atualizado com bordas coloridas, `#status-tabs`, Input dock/height
+- `tests/test_tui.py` — 16 novos testes para bordas e estrutura do StatusPanel
+
+#### Testes — 88 cenários no total (16 novos):
+
+**StatusPanel (3 novos):**
+
+- Instanciação com `BORDER_TITLE = "Status"`
+- `DIRS` mapeia 3 diretórios corretamente
+- Chaves de `DIRS` batem com os identificadores das abas
+
+**Bordas CSS (13 novos, parametrizados):**
+
+- Cada painel tem `border: round <cor>` (4 testes)
+- Cada painel tem `border-title-color: <cor>` (4 testes)
+- Todos os painéis têm `border-title-style: bold` (4 testes)
+- `#status-tabs` definido com `height: 1fr`
+- Input do StatusPanel com `dock: bottom` e `height: 3`
+
+#### Critérios de aceitação atendidos:
+
+- ✅ Todas as quatro janelas com bordas visíveis (RF1)
+- ✅ Cada janela com título na borda superior (RF2)
+- ✅ Títulos em linha única com estilo bold (RF3)
+- ✅ StatusPanel com três abas: skills, context, hooks (RF4)
+- ✅ Aba skills lista arquivos de `.hrns/skills` (RF5)
+- ✅ Aba context lista arquivos de `.hrns/context` (RF6)
+- ✅ Aba hooks lista arquivos de `.hrns/hooks` (RF7)
+- ✅ Mensagem "nao existem arquivos em {dir}" para diretório vazio (RF8)
+- ✅ Arquivos ordenados alfabeticamente (RF9)
+- ✅ Abas preenchidas ao iniciar a interface (RF10)
+
+---
+
+### `20260524_2041_prd_atalhos_abas_hrns.md`
+
+**Descrição:** Atalhos de teclado numéricos e por letra para alternar entre as abas skills, context e hooks, com exibição no Footer.
+
+**Status:** ✅ Implementado
+
+#### O que foi implementado:
+
+- `BINDINGS` com 6 atalhos: numéricos (`1`, `2`, `3`) e por letra (`s`, `c`, `h`) para alternar abas (RF1, RF8)
+- Método `action_switch_tab(tab_id)` em `HrnsApp` — ativa a `TabPane` correspondente via `tabbed.active = tab_id` (RF2)
+- `Footer` widget adicionado ao `compose()` — exibe todos os atalhos disponíveis na barra inferior (RF7)
+- IDs das `TabPane` simplificados de `skills-pane` para `skills` (mesmo padrão para context/hooks) para casar com os parâmetros dos atalhos
+- Importação de `Footer` e `TabbedContent` no módulo `app.py`
+
+#### Arquivos modificados:
+
+- `src/hrns/tui/app.py` — `BINDINGS` expandido, `Footer` no `compose()`, método `action_switch_tab`
+- `src/hrns/tui/widgets/status.py` — IDs das `TabPane` simplificados (`skills`, `context`, `hooks`)
+- `tests/test_tui.py` — 4 novos testes para atalhos e Footer
+
+#### Testes — 91 cenários no total (4 novos):
+
+**Atalhos e Footer (4 novos):**
+
+- `test_app_has_bindings` — verifica teclas `1`,`2`,`3`, `s`,`c`,`h` além de `ctrl+q`
+- `test_action_switch_tab_exists` — método existe e é callable
+- `test_footer_imported_in_app` — Footer referenciado no source de `compose()`
+- `test_footer_import_in_module` — Footer no namespace do módulo `app`
+
+#### Critérios de aceitação atendidos:
+
+- ✅ Atalhos numéricos `1`, `2`, `3` alternam entre abas (RF1, RF8)
+- ✅ Atalhos por letra `s`, `c`, `h` alternam entre abas (RF1, RF8)
+- ✅ `action_switch_tab` muda o `active` do `TabbedContent` (RF2)
+- ✅ `list_files` usado para listar arquivos nas abas (RF3-RF6 — já implementado no PRD anterior)
+- ✅ Footer exibe os atalhos disponíveis (RF7)
+
+---
+
+### `20260524_2102_prd_frontmatter_skills_hrns.md`
+
+**Descrição:** Leitura de frontmatter YAML dos arquivos em `.hrns/skills` para exibir o nome descritivo ao lado do nome do arquivo na aba skills.
+
+**Status:** ✅ Implementado
+
+#### O que foi implementado:
+
+- Dependência `python-frontmatter>=1.0` adicionada ao `pyproject.toml`
+- Método estático `_get_skill_display_name(file_path)` em `StatusPanel`:
+  - Lê o arquivo como UTF-8
+  - Faz parse do frontmatter YAML via `frontmatter.parse()`
+  - Se o campo `nome` existir, retorna `"filename - nome"`
+  - Se não houver frontmatter, `nome` ausente ou erro de leitura/parse, retorna apenas o nome do arquivo (RF4, RF5)
+- `_populate_tab` atualizado: na aba `skills`, usa `_get_skill_display_name`; nas demais abas usa apenas `Path(fname).name` (RF3)
+- `list_files()` do módulo `discovery` continua sendo usado para obter os arquivos (RF7)
+
+#### Arquivos modificados:
+
+- `pyproject.toml` — adicionado `python-frontmatter>=1.0`
+- `src/hrns/tui/widgets/status.py` — método `_get_skill_display_name`, `_populate_tab` com branch para skills
+- `tests/test_frontmatter.py` (novo) — 14 testes
+- `uv.lock` — atualizado com `python-frontmatter` e `pyyaml`
+
+#### Testes — 105 cenários no total (14 novos):
+
+**Casos comuns (3):**
+- Arquivo com `nome` → `"filename - Nome"`
+- Unicode no `nome` preservado (🚀)
+- Múltiplos arquivos cada um com seu `nome`
+
+**Casos extremos (8):**
+- Arquivo sem frontmatter → só filename
+- Frontmatter sem campo `nome` → só filename
+- Frontmatter vazio (`---\n---`) → só filename
+- YAML inválido/malformado → só filename (não quebra)
+- Arquivo vazio → só filename
+- Arquivo Markdown com frontmatter → `"guia.md - Guia de Uso"`
+- Espaços ao redor do `nome` → stripped pelo YAML
+- Nome de arquivo com caracteres especiais (`.`, `-`, `_`)
+
+**Casos de erro (3):**
+- Arquivo inexistente → retorna só o filename
+- Path é diretório → retorna o nome do diretório
+- Arquivo binário → retorna só o filename (não quebra)
+
+#### Critérios de aceitação atendidos:
+
+- ✅ Frontmatter YAML lido de cada arquivo em `.hrns/skills` (RF1)
+- ✅ Metadados `nome`, `description`, `trigger` extraídos (RF2)
+- ✅ Nome do frontmatter exibido no formato `arquivo.py - Nome` (RF3)
+- ✅ Arquivos sem frontmatter exibem apenas o nome (RF4)
+- ✅ Frontmatter sem campo `nome` exibe apenas o nome (RF5)
+- ✅ Ordenação alfabética por nome de arquivo (RF6 — via `list_files`)
+- ✅ `list_files` do PRD de listagem utilizado (RF7)

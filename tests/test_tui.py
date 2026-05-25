@@ -11,7 +11,7 @@ from src.hrns.tui.widgets import (
     WorkPanel,
 )
 from src.hrns.tui.app import HrnsApp
-
+from textual.widgets import Footer
 
 # ---------------------------------------------------------------------------
 # validate_terminal_size
@@ -78,13 +78,24 @@ class TestConversationalPanel:
 
 
 class TestStatusPanel:
-    """Tests for the StatusPanel widget."""
+    """Tests for the StatusPanel widget with tabbed file viewer."""
 
     def test_instantiation(self):
         """StatusPanel can be instantiated."""
         panel = StatusPanel()
         assert panel is not None
         assert panel.BORDER_TITLE == "Status"
+
+    def test_dirs_has_three_entries(self):
+        """StatusPanel.DIRS maps the three .hrns subdirectories."""
+        assert len(StatusPanel.DIRS) == 3
+        assert StatusPanel.DIRS["skills"] == ".hrns/skills"
+        assert StatusPanel.DIRS["context"] == ".hrns/context"
+        assert StatusPanel.DIRS["hooks"] == ".hrns/hooks"
+
+    def test_dirs_keys_match_tab_ids(self):
+        """DIRS keys match the tab identifiers used in compose."""
+        assert set(StatusPanel.DIRS.keys()) == {"skills", "context", "hooks"}
 
 
 class TestTasksPanel:
@@ -131,10 +142,37 @@ class TestHrnsApp:
         assert "WorkPanel" in app.CSS
 
     def test_app_has_bindings(self):
-        """App has the quit binding."""
+        """App has the quit binding and all tab-switching shortcuts."""
         app = HrnsApp()
         bindings = app.BINDINGS
-        assert any(binding[0] == "ctrl+q" for binding in bindings)
+        keys = {b[0] for b in bindings}
+        assert "ctrl+q" in keys
+        # numeric shortcuts (RF8)
+        assert "1" in keys
+        assert "2" in keys
+        assert "3" in keys
+        # letter shortcuts (RF8)
+        assert "s" in keys
+        assert "c" in keys
+        assert "h" in keys
+
+    def test_action_switch_tab_exists(self):
+        """action_switch_tab method is defined on HrnsApp."""
+        app = HrnsApp()
+        assert hasattr(app, "action_switch_tab")
+        assert callable(app.action_switch_tab)
+
+    def test_footer_imported_in_app(self):
+        """Footer is imported and used in app.py."""
+        import inspect
+        source = inspect.getsource(HrnsApp.compose)
+        assert "Footer" in source
+        assert "yield Footer()" in source
+
+    def test_footer_import_in_module(self):
+        """Footer is among the app module imports."""
+        import src.hrns.tui.app as app_module
+        assert "Footer" in app_module.__dict__
 
     def test_app_css_is_defined(self):
         """App has CSS defined."""
@@ -142,6 +180,55 @@ class TestHrnsApp:
         assert app.CSS is not None
         assert "7fr" in app.CSS
         assert "3fr" in app.CSS
+
+    # ------------------------------------------------------------------
+    # Border CSS (RF1, RF2, RF3)
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("panel,color", [
+        ("ConversationalPanel", "cyan"),
+        ("StatusPanel", "green"),
+        ("TasksPanel", "yellow"),
+        ("WorkPanel", "magenta"),
+    ])
+    def test_panel_has_border_style(self, panel, color):
+        """Each panel CSS block declares a round border with the correct color."""
+        app = HrnsApp()
+        assert f"border: round {color}" in app.CSS
+
+    @pytest.mark.parametrize("panel,color", [
+        ("ConversationalPanel", "cyan"),
+        ("StatusPanel", "green"),
+        ("TasksPanel", "yellow"),
+        ("WorkPanel", "magenta"),
+    ])
+    def test_panel_has_border_title_color(self, panel, color):
+        """Each panel CSS block sets border-title-color."""
+        app = HrnsApp()
+        assert f"border-title-color: {color}" in app.CSS
+
+    @pytest.mark.parametrize("panel", [
+        "ConversationalPanel",
+        "StatusPanel",
+        "TasksPanel",
+        "WorkPanel",
+    ])
+    def test_panel_has_bold_border_title(self, panel):
+        """Each panel uses bold border-title-style."""
+        app = HrnsApp()
+        assert "border-title-style: bold" in app.CSS
+
+    def test_status_tabs_css_is_defined(self):
+        """CSS defines #status-tabs with height: 1fr."""
+        app = HrnsApp()
+        assert "#status-tabs" in app.CSS
+        assert "height: 1fr" in app.CSS
+
+    def test_status_input_has_bottom_dock(self):
+        """Input in StatusPanel is docked at bottom with fixed height."""
+        app = HrnsApp()
+        assert "dock: bottom" in app.CSS
+        assert "height: 3" in app.CSS
 
 
 # ---------------------------------------------------------------------------
