@@ -94,10 +94,8 @@ response = client.chat.completions.create(
     tool_choice="auto",
 )
 
-# Process the response: execute any function calls and add results to messages
+# Process the first response: execute function calls and add results to messages
 msg = response.choices[0].message
-
-# Append the assistant message (with tool_calls) to the conversation
 messages.append(msg.model_dump())
 
 for tool_call in msg.tool_calls:
@@ -113,12 +111,28 @@ for tool_call in msg.tool_calls:
 
     print(f"Executed {tool_call.function.name}({args}) = {result}")
 
-    # Append the tool result to the conversation
     messages.append({
         "role": "tool",
         "tool_call_id": tool_call.id,
         "content": json.dumps({"result": result})
     })
 
-print("\nMessages:")
-print(json.dumps(messages, indent=2, default=str))
+# Make a second API call with the updated conversation
+response2 = client.chat.completions.create(
+    model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+    messages=messages,
+    tools=tool_schemas,
+    tool_choice="auto",
+)
+
+# Process the second response: the model should either return the final answer
+# directly as text or call the final_answer tool
+msg2 = response2.choices[0].message
+
+if msg2.content:
+    print("Final Answer:", msg2.content)
+elif msg2.tool_calls:
+    for tc in msg2.tool_calls:
+        if tc.function.name == "final_answer":
+            args = json.loads(tc.function.arguments)
+            print("Final Answer:", args.get("answer"))
