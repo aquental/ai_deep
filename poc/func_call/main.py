@@ -1,21 +1,18 @@
 import json
 import os
-
-import openai
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
-# Create DeepSeek client
-client = openai.OpenAI(
-    api_key=os.environ["DEEPSEEK_API_KEY"],
-    base_url=os.environ["DEEPSEEK_BASE_URL"],
+client = OpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
 )
 
-MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-
-
 # Define the functions we want to make available to the model
+
+
 def add(a: float, b: float) -> float:
     """Add two numbers together."""
     return a + b
@@ -36,15 +33,12 @@ tool_schemas = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "answer": {
-                        "type": "string",
-                        "description": "The final answer for the user.",
-                    }
+                    "answer": {"type": "string", "description": "The final answer for the user."}
                 },
                 "required": ["answer"],
-                "additionalProperties": False,
-            },
-        },
+                "additionalProperties": False
+            }
+        }
     },
     {
         "type": "function",
@@ -55,12 +49,12 @@ tool_schemas = [
                 "type": "object",
                 "properties": {
                     "a": {"type": "number", "description": "The first number"},
-                    "b": {"type": "number", "description": "The second number"},
+                    "b": {"type": "number", "description": "The second number"}
                 },
                 "required": ["a", "b"],
-                "additionalProperties": False,
-            },
-        },
+                "additionalProperties": False
+            }
+        }
     },
     {
         "type": "function",
@@ -71,13 +65,13 @@ tool_schemas = [
                 "type": "object",
                 "properties": {
                     "a": {"type": "number", "description": "The first number"},
-                    "b": {"type": "number", "description": "The second number"},
+                    "b": {"type": "number", "description": "The second number"}
                 },
                 "required": ["a", "b"],
-                "additionalProperties": False,
-            },
-        },
-    },
+                "additionalProperties": False
+            }
+        }
+    }
 ]
 
 system_prompt = """
@@ -86,39 +80,45 @@ When asked to do math, you must use the provided tools.
 When your work is done, call the final_answer tool.
 """
 
-# Build messages list (Chat Completions API format)
+# Initialize messages with system prompt and user request
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Compute 15 + 27"},
+    {"role": "user", "content": "Compute 15 + 27"}
 ]
 
-# First API call: the model will see the user's request and available tools
+# First API call using Chat Completions (DeepSeek compatible)
 response = client.chat.completions.create(
-    model=MODEL,
+    model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
     messages=messages,
     tools=tool_schemas,
+    tool_choice="auto",
 )
 
-# Process the response: execute any function calls
-choice = response.choices[0]
+# Process the response: execute any function calls and add results to messages
+msg = response.choices[0].message
 
-if choice.message.tool_calls:
-    for tool_call in choice.message.tool_calls:
-        fn = tool_call.function
-        args = json.loads(fn.arguments)
+# Append the assistant message (with tool_calls) to the conversation
+messages.append(msg.model_dump())
 
-        # Dispatch to the correct function
-        match fn.name:
-            case "add":
-                result = add(**args)
-            case "multiply":
-                result = multiply(**args)
-            case _:
-                result = f"Error: Unknown tool '{fn.name}'"
+for tool_call in msg.tool_calls:
+    args = json.loads(tool_call.function.arguments)
 
-        # Print verification line
-        print(f"Executed {fn.name} with args {args} -> result: {result}")
-elif choice.message.content:
-    print(f"Model response (no tool calls): {choice.message.content}")
-else:
-    print("No tool calls or content in response.")
+    match tool_call.function.name:
+        case "add":
+            result = add(**args)
+        case "multiply":
+            result = multiply(**args)
+        case _:
+            result = f"Error: Tool {tool_call.function.name} not implemented"
+
+    print(f"Executed {tool_call.function.name}({args}) = {result}")
+
+    # Append the tool result to the conversation
+    messages.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": json.dumps({"result": result})
+    })
+
+print("\nMessages:")
+print(json.dumps(messages, indent=2, default=str))

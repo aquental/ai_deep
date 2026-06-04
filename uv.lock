@@ -61,6 +61,18 @@ wheels = [
 name = "func-call"
 version = "0.1.0"
 source = { virtual = "poc/func_call" }
+dependencies = [
+    { name = "openai" },
+    { name = "python-dotenv" },
+    { name = "python-frontmatter" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "openai", specifier = ">=2.38.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "python-frontmatter", specifier = ">=1.0" },
+]
 
 [[package]]
 name = "h11"
