@@ -29,3 +29,8 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.uv.workspace]
+members = [
+    "poc/func_call",
+]
