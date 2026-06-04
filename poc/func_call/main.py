@@ -83,7 +83,7 @@ When your work is done, call the final_answer tool.
 # Initialize messages with system prompt and user request
 messages = [
     {"role": "system", "content": system_prompt},
-    {"role": "user", "content": "Compute 15 + 27"}
+    {"role": "user", "content": "Compute 15 + 27 and also compute 8 * 6"}
 ]
 
 # First API call using Chat Completions (DeepSeek compatible)
