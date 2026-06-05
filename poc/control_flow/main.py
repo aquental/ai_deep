@@ -1,5 +1,16 @@
 import json
+import os
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import openai
+
+# Configure OpenAI client for DeepSeek API
+openai_client = openai.OpenAI(
+    api_key=os.environ["DEEPSEEK_API_KEY"],
+    base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+)
 
 # Define the functions we want to make available to the model
 
@@ -18,46 +29,52 @@ def multiply(a: float, b: float) -> float:
 tool_schemas = [
     {
         "type": "function",
-        "name": "add",
-        "description": "Add two numbers together",
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "a": {"type": "number", "description": "The first number"},
-                "b": {"type": "number", "description": "The second number"}
-            },
-            "required": ["a", "b"],
-            "additionalProperties": False
+        "function": {
+            "name": "add",
+            "description": "Add two numbers together",
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number", "description": "The first number"},
+                    "b": {"type": "number", "description": "The second number"}
+                },
+                "required": ["a", "b"],
+                "additionalProperties": False
+            }
         }
     },
     {
         "type": "function",
-        "name": "multiply",
-        "description": "Multiply two numbers together",
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "a": {"type": "number", "description": "The first number"},
-                "b": {"type": "number", "description": "The second number"}
-            },
-            "required": ["a", "b"],
-            "additionalProperties": False
+        "function": {
+            "name": "multiply",
+            "description": "Multiply two numbers together",
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "a": {"type": "number", "description": "The first number"},
+                    "b": {"type": "number", "description": "The second number"}
+                },
+                "required": ["a", "b"],
+                "additionalProperties": False
+            }
         }
     },
     {
         "type": "function",
-        "name": "final_answer",
-        "description": "Provide the final answer and stop.",
-        "strict": True,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "answer": {"type": "string", "description": "The final answer for the user."}
-            },
-            "required": ["answer"],
-            "additionalProperties": False
+        "function": {
+            "name": "final_answer",
+            "description": "Provide the final answer and stop.",
+            "strict": True,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string", "description": "The final answer for the user."}
+                },
+                "required": ["answer"],
+                "additionalProperties": False
+            }
         }
     }
 ]
@@ -87,31 +104,48 @@ while not done and step < max_steps:
     step += 1
     print(f"\n--- Step {step} ---")
 
-    # Call the LLM with current context
-    response = openai.responses.create(
-        model="gpt-5",
-        instructions=system_prompt,
-        input=context,
+    # Call the LLM with current context (Chat Completions API)
+    response = openai_client.chat.completions.create(
+        model=os.environ.get("DEEPSEEK_MODEL", "deepseek-chat"),
+        messages=[{"role": "system", "content": system_prompt}] + context,
         tools=tool_schemas,
-        tool_choice="required",
-        reasoning={"effort": "low"}
+        tool_choice="auto",
     )
 
-    # Process each item in the response output
-    for item in response.output:
-        if item.type == "function_call":
-            function_name = item.name
-            args = json.loads(item.arguments)
+    # Get the assistant message
+    assistant_message = response.choices[0].message
+
+    # If the model responds with text (no tool calls), add it to context
+    if assistant_message.content:
+        context.append({
+            "role": "assistant",
+            "content": assistant_message.content
+        })
+
+    # Process tool calls
+    if assistant_message.tool_calls:
+        # Record the assistant message with tool calls in context
+        context.append({
+            "role": "assistant",
+            "content": assistant_message.content,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments
+                    }
+                }
+                for tc in assistant_message.tool_calls
+            ]
+        })
+
+        for tc in assistant_message.tool_calls:
+            function_name = tc.function.name
+            args = json.loads(tc.function.arguments)
 
             print(f"Calling function: {function_name}({args})")
-
-            # Record the model's decision (append function call to context)
-            context.append({
-                "type": "function_call",
-                "name": function_name,
-                "arguments": item.arguments,
-                "call_id": item.call_id
-            })
 
             # Execute the requested tool safely
             try:
@@ -144,9 +178,9 @@ while not done and step < max_steps:
 
             # Complete the feedback loop: append tool output to context
             context.append({
-                "type": "function_call_output",
-                "call_id": item.call_id,
-                "output": output
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": output
             })
 
             # Exit gracefully if final_answer was called
