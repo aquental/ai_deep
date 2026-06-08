@@ -1,16 +1,25 @@
 import json
 from core.agent import Agent
 
-# TODO: Create an agent instance using default settings (no arguments needed)
+# Create an agent instance with default settings
 agent = Agent()
-# TODO: Print the agent's model attribute
-print(f"Model         : {agent.model}")
-# TODO: Print the agent's reasoning_effort attribute
-print(f"Reasoning     : {agent.reasoning_effort}")
-# TODO: Print the agent's max_steps attribute
-print(f"Max steps     : {agent.max_steps}")
-# TODO: Print the agent's system_prompt attribute
-print(f"System prompt : {agent.system_prompt}")
 
-print("tool schemas :")
-print(json.dumps(agent.tool_schemas, indent=2))
+# Create a context with a message that prompts the model to call final_answer directly
+# We ask for a direct answer to encourage the model to use final_answer without needing math tools
+context = [
+    {
+        "role": "user",
+        "content": "Please provide your final answer now and stop. Just say 'Hello, I am ready!'"
+    }
+]
+
+# Call agent._next_step(context) and capture the three return values in variables:
+#   updated_context, status, final_answer
+updated_context, status, final_answer = agent._next_step(context)
+
+# Print the status (expected: "complete")
+print(f"Status: {status}")
+# Print the final_answer (expected: a string containing the model's response)
+print(f"Response: {final_answer}")
+# TODO: Print how many items are in updated_context (hint: use len())
+print(f"Context length: {len(updated_context)}")
