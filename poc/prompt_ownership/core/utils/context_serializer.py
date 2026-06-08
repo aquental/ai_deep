@@ -1,3 +1,4 @@
+import json
 from typing import List, Dict, Any
 from pathlib import Path
 
@@ -12,22 +13,64 @@ def serialize_context_to_text(context: List[Dict[str, Any]]) -> str:
     Transform the raw context list into structured markdown text.
     Returns a formatted string ready to send to the model.
     """
-    # Return empty string if context is empty
     if not context:
         return ""
 
-    # Extract the user message from the context list
     user_message = ""
-    # Look for the first item with role "user" and get its content
     for item in context:
         if item.get("role") == "user":
             user_message = item.get("content", "")
             break
 
-    # Set execution_history to "(No actions completed yet)" for now
-    execution_history = "\n(No actions completed yet)"
+    # Build call_map by iterating through context items with type "function_call"
+    # For each function_call, extract call_id, name, and arguments
+    # If arguments is a JSON string, parse it to a dict using json.loads
+    # Format dict arguments as "k=repr(v)" pairs joined by ", "
+    # Store the formatted signature as "function_name(args)" in call_map[call_id]
+    call_map = {}
+    for item in context:
+        if item.get("type") == "function_call":
+            call_id = item.get("call_id")
+            call_name = item.get("name")
+            call_args = item.get("arguments", "{}")
 
-    # Return _CONTEXT_TEMPLATE formatted with user_message and execution_history
+            # Parse arguments if they're a JSON string
+            if isinstance(call_args, str):
+                try:
+                    call_args = json.loads(call_args)
+                except:
+                    pass
+
+            # Format arguments as readable key=value pairs
+            if isinstance(call_args, dict):
+                args_str = ", ".join(
+                    f"{k}={repr(v)}" for k, v in call_args.items())
+            else:
+                args_str = str(call_args)
+
+            # Store the formatted call signature
+            call_map[call_id] = f"{call_name}({args_str})"
+
+    # Build execution history lines by iterating through context items with type "function_call_output"
+    # For each output, extract call_id and output value
+    # Look up the formatted call signature in call_map (use unknown_call(call_id) as fallback)
+    # Append a line like "✓ COMPLETED: <signature> → Result: <output>"
+    lines = []
+    for item in context:
+        if item.get("type") == "function_call_output":
+            call_id = item.get("call_id")
+            output = item.get("output", "{}")
+
+            # Look up the formatted function call
+            call_formatted = call_map.get(call_id, f"unknown_call({call_id})")
+
+            # Create a readable line showing what was completed
+            lines.append(f"✓ COMPLETED: {call_formatted} → Result: {output}")
+
+    # Join the lines into a single string or use the default message if empty
+    execution_history = "\n".join(
+        lines) if lines else "(No actions completed yet)"
+
     return _CONTEXT_TEMPLATE.format(
         user_message=user_message,
         execution_history=execution_history
