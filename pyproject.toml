@@ -35,4 +35,5 @@ members = [
     "poc/func_call",
     "poc/control_flow",
     "poc/stateless_reducer",
+    "poc/prompt_ownership",
 ]
