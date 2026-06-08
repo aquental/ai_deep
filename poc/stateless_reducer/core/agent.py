@@ -3,14 +3,22 @@ import openai
 from pathlib import Path
 from typing import List, Any
 
+from core.tools.functions.math import (
+    sum_numbers,
+    multiply_numbers,
+    subtract_numbers,
+    divide_numbers,
+    power,
+    square_root
+)
+
 
 class Agent:
     """
     A stateless reducer agent that processes context step-by-step.
 
-    This exercise focuses on implementing the first half of _next_step:
-    parsing model responses and handling the completion signal.
-    Tool execution will be added in a future exercise.
+    This exercise focuses on implementing tool execution with error handling
+    using match/case to route function calls to their implementations.
     """
 
     def __init__(
@@ -82,17 +90,16 @@ class Agent:
 
     def _next_step(self, context: List[Any]):
         """
-        Execute one step of the agent loop:
-        1. Call the LLM
-        2. Extract function calls from the response
-        3. Record function calls in context
-        4. Check for completion signal (final_answer)
+        Execute one step of the agent loop - the "reducer" transformation:
+        1. Call the LLM to get the next action (function call)
+        2. Parse and record the function call in context
+        3. Execute the tool and capture its output
+        4. Append structured output to context
 
-        Note: This exercise focuses on parsing and completion detection.
-        Tool execution will be added in a future exercise.
+        This implements the reducer pattern: parse action → execute → append result.
 
         Returns: (updated_context, status, final_answer)
-            - updated_context: The context list with new function calls appended
+            - updated_context: The context list with new function calls and outputs
             - status: "complete" if final_answer was called, "running" otherwise
             - final_answer: The answer string if complete, None otherwise
         """
@@ -120,6 +127,7 @@ class Agent:
             if call_name == "final_answer":
                 # Stop the loop and return the answer
                 return context, "complete", call_arguments.get("answer")
+
             # Execute the tool based on its name
             match call_name:
                 case "sum_numbers":
@@ -128,9 +136,36 @@ class Agent:
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
-
-                # Similar cases for multiply_numbers, subtract_numbers, divide_numbers, power, and square_root...
-
+                case "multiply_numbers":
+                    try:
+                        result = multiply_numbers(**call_arguments)
+                        output = json.dumps({"result": result})
+                    except Exception as e:
+                        output = json.dumps({"result": f"Error: {str(e)}"})
+                case "subtract_numbers":
+                    try:
+                        result = subtract_numbers(**call_arguments)
+                        output = json.dumps({"result": result})
+                    except Exception as e:
+                        output = json.dumps({"result": f"Error: {str(e)}"})
+                case "divide_numbers":
+                    try:
+                        result = divide_numbers(**call_arguments)
+                        output = json.dumps({"result": result})
+                    except Exception as e:
+                        output = json.dumps({"result": f"Error: {str(e)}"})
+                case "power":
+                    try:
+                        result = power(**call_arguments)
+                        output = json.dumps({"result": result})
+                    except Exception as e:
+                        output = json.dumps({"result": f"Error: {str(e)}"})
+                case "square_root":
+                    try:
+                        result = square_root(**call_arguments)
+                        output = json.dumps({"result": result})
+                    except Exception as e:
+                        output = json.dumps({"result": f"Error: {str(e)}"})
                 case _:
                     # Unknown tool name
                     output = json.dumps(
@@ -143,5 +178,5 @@ class Agent:
                 "output": output
             })
 
-        # After processing all function calls, return (context, "running", None)
+        # All tools executed, continue the loop
         return context, "running", None
