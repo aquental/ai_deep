@@ -11,6 +11,8 @@ from core.tools.functions.math import (
     power,
     square_root
 )
+# Import serialize_context_to_text from core.utils.context_serializer
+from core.utils.context_serializer import serialize_context_to_text
 
 
 class Agent:
@@ -24,15 +26,9 @@ class Agent:
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.max_steps = max_steps
-
-        # TODO: Load the system prompt from src/core/prompts/base_system.md using Path
-        # TODO: Read the file with UTF-8 encoding and append extra_instructions
-        self.system_prompt = (
-            "You are an autonomous agent that can take multiple tool-calling steps. "
-            "If your work is done, call the final_answer tool. "
-            "ALWAYS prefer calling tools to compute, fetch, or transform information "
-            "rather than fabricating results."
-        ) + extra_instructions
+        # Load system prompt from file (Factor 2).
+        prompt_path = Path(__file__).resolve().parent / "prompts" / "base_system.md"
+        self.system_prompt = prompt_path.read_text(encoding="utf-8") + extra_instructions
 
         schemas_dir = Path(__file__).resolve().parent / "tools" / "schemas"
         with open(schemas_dir / "math.json", "r", encoding="utf-8") as f:
@@ -46,21 +42,27 @@ class Agent:
         ]
 
     def _call_llm(self, context: List[Any]):
+        # Call serialize_context_to_text(context) to transform the raw context
+        serialized_content = serialize_context_to_text(context)
+        # TODO: Print the serialized markdown with a clear separator and label so you can see what the model receives
+        print("/ Serialized content " + 10 * "- ")
+        print(serialized_content)
+        print("\\" + 20 * " -")
+
+        # Pass the serialized string as the input parameter instead of the raw context list
         response = openai.responses.create(
             model=self.model,
             instructions=self.system_prompt,
-            input=context,
+            input=serialized_content,
             tools=self.tool_schemas,
             tool_choice="required",
-            reasoning={
-                "effort": self.reasoning_effort} if self.model == "gpt-5" else None
+            reasoning={"effort": self.reasoning_effort} if self.model == "gpt-5" else None
         )
         return response
 
     def _next_step(self, context: List[Any]):
         response = self._call_llm(context)
-        function_calls = [
-            item for item in response.output if item.type == "function_call"]
+        function_calls = [item for item in response.output if item.type == "function_call"]
 
         for fc in function_calls:
             call_name = fc.name
@@ -114,8 +116,7 @@ class Agent:
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
                 case _:
-                    output = json.dumps(
-                        {"result": f"Error: Tool {call_name} not found"})
+                    output = json.dumps({"result": f"Error: Tool {call_name} not found"})
 
             context.append({
                 "type": "function_call_output",
@@ -126,15 +127,20 @@ class Agent:
         return context, "running", None
 
     def run(self, context: List[Any]):
+        # Main entry point: run the agent until done or max steps
+        # This is the "reducer" pattern: context in, context out
         step = 0
         status = "running"
         final_answer = None
 
+        # Loop until complete or max steps reached
         while status == "running" and step < self.max_steps:
             step += 1
+            # Each step processes function calls and updates context
             context, status, final_answer = self._next_step(context)
-
+        # Handle max steps case
         if status == "running":
             status = "max_steps_reached"
 
+        # Return the final state
         return context, status, final_answer
