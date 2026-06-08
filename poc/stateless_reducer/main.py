@@ -1,22 +1,20 @@
-import json
 from core.agent import Agent
 
-# Create an agent instance with default settings
+# Create an agent instance using default settings
 agent = Agent()
 
-# Create a context that will trigger a division by zero error
+# Create a context list with a user message that requires multiple steps to solve
+# Example: "Solve the root of this equation: x^2 - 5x + 6 = 0"
 context = [
     {
         "role": "user",
-        "content": "Compute 10 divided by 0"
+        "content": "Solve the root of this equation: x^2 - 5x + 6 = 0"
     }
 ]
 
-# TODO: Call _next_step to execute one iteration and capture:
-#   final_context, status, final_answer
-final_context, status, final_answer = agent._next_step(context)
-# TODO: Print the status
-print(f"Status: {status}")
-# TODO: Print the resulting context as pretty JSON (hint: json.dumps(..., indent=2))
-print("Result:")
-print(json.dumps(final_context, indent=2))
+# Call agent.run(context) and capture the three return values: context, status, final_answer
+context, status, final_answer = agent.run(context)
+# TODO: Print the status (expected: "complete")
+print(f"Status       : {status}")
+# TODO: Print the final_answer
+print(f"Final answer : {final_answer}")

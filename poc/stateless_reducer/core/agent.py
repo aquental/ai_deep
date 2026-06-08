@@ -17,8 +17,8 @@ class Agent:
     """
     A stateless reducer agent that processes context step-by-step.
 
-    This exercise focuses on implementing tool execution with error handling
-    using match/case to route function calls to their implementations.
+    This exercise focuses on implementing the run method to orchestrate
+    the full reducer loop until completion or max_steps is reached.
     """
 
     def __init__(
@@ -37,7 +37,6 @@ class Agent:
             extra_instructions: Additional instructions to append to the system prompt
             max_steps: Maximum number of steps the agent can take (default: 10)
         """
-        # Store model configuration
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.max_steps = max_steps
@@ -51,7 +50,6 @@ class Agent:
         ) + extra_instructions
 
         # Load tool schemas from JSON files
-        # Using Path makes this portable across different environments
         schemas_dir = Path(__file__).resolve().parent / "tools" / "schemas"
 
         with open(schemas_dir / "math.json", "r", encoding="utf-8") as f:
@@ -90,27 +88,18 @@ class Agent:
 
     def _next_step(self, context: List[Any]):
         """
-        Execute one step of the agent loop - the "reducer" transformation:
-        1. Call the LLM to get the next action (function call)
-        2. Parse and record the function call in context
-        3. Execute the tool and capture its output
-        4. Append structured output to context
-
-        This implements the reducer pattern: parse action → execute → append result.
+        Execute one step of the agent loop:
+        1. Call the LLM
+        2. Extract function calls
+        3. Execute tools
+        4. Update context
 
         Returns: (updated_context, status, final_answer)
-            - updated_context: The context list with new function calls and outputs
-            - status: "complete" if final_answer was called, "running" otherwise
-            - final_answer: The answer string if complete, None otherwise
         """
-        # Get the model's response
         response = self._call_llm(context)
-
-        # Extract all function calls from the response
         function_calls = [
             item for item in response.output if item.type == "function_call"]
 
-        # Process each function call
         for fc in function_calls:
             call_name = fc.name
             call_arguments = json.loads(fc.arguments)
@@ -125,7 +114,6 @@ class Agent:
 
             # Check if this is the final answer
             if call_name == "final_answer":
-                # Stop the loop and return the answer
                 return context, "complete", call_arguments.get("answer")
 
             # Execute the tool based on its name
@@ -136,42 +124,47 @@ class Agent:
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case "multiply_numbers":
                     try:
                         result = multiply_numbers(**call_arguments)
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case "subtract_numbers":
                     try:
                         result = subtract_numbers(**call_arguments)
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case "divide_numbers":
                     try:
                         result = divide_numbers(**call_arguments)
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case "power":
                     try:
                         result = power(**call_arguments)
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case "square_root":
                     try:
                         result = square_root(**call_arguments)
                         output = json.dumps({"result": result})
                     except Exception as e:
                         output = json.dumps({"result": f"Error: {str(e)}"})
+
                 case _:
-                    # Unknown tool name
                     output = json.dumps(
                         {"result": f"Error: Tool {call_name} not found"})
 
-            # Record the tool output in context, linked to the original call
+            # Record the tool output in context
             context.append({
                 "type": "function_call_output",
                 "call_id": fc.call_id,
@@ -180,3 +173,33 @@ class Agent:
 
         # All tools executed, continue the loop
         return context, "running", None
+
+    def run(self, context: List[Any]):
+        """
+        Run the agent loop until completion or max_steps.
+
+        This is the main orchestration method that implements the reducer pattern:
+        context in, context out. It repeatedly calls _next_step until the agent
+        completes or hits the safety boundary.
+
+        Returns: (final_context, status, final_answer)
+            - final_context: The complete conversation history
+            - status: "complete" if finished, "max_steps_reached" if hit limit
+            - final_answer: The final answer string if complete, None otherwise
+        """
+        step = 0
+        status = "running"
+        final_answer = None
+
+        # Keep running until we complete or hit the step limit
+        while status == "running" and step < self.max_steps:
+            step += 1
+            # Each step returns updated context, status, and potentially an answer
+            context, status, final_answer = self._next_step(context)
+
+        # If we hit the step limit without completing, update status
+        if status == "running":
+            status = "max_steps_reached"
+
+        # Return the final state
+        return context, status, final_answer
