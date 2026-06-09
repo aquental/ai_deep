@@ -36,4 +36,6 @@ members = [
     "poc/control_flow",
     "poc/stateless_reducer",
     "poc/prompt_ownership",
+    "execution_state",
+    "poc/execution_state",
 ]
