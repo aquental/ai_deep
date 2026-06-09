@@ -2,39 +2,33 @@ import uuid
 from core.agent import Agent
 from core.models.state import State
 
-agent = Agent()
+# Create an agent with max_steps=3 to force an early exit
+agent = Agent(max_steps=3)
 
-state = State(
+# Build the initial state
+initial_state = State(
     id=str(uuid.uuid4()),
     context=[
         {
             "role": "user",
-            "content": "What is 2 + 3?"
+            "content": "Solve the root of this equation: x^2 - 5x + 6 = 0"
         }
     ]
 )
 
-# Seed a mock tool call to verify deferred execution
-state.pending_tool_calls = [
-    {
-        "name": "sum_numbers",
-        "arguments": {"a": 2, "b": 3},
-        "call_id": "call_1",
-        "type": "function_call"
-    }
-]
+# Call agent.run(initial_state) and store the result in intermediate_state
+intermediate_state = agent.run(initial_state)
 
-# Run one step — the seeded call should be executed first, then the LLM queues new calls
-state = agent._next_step(state)
+# Print the intermediate_state using .model_dump_json(indent=2)
+print("Intermediate state: ")
+print(intermediate_state.model_dump_json(indent=2))
 
-# Verify the deferred execution worked
-print(f"Steps: {state.steps}")
-print(f"Status: {state.status}")
+# Create a new Agent instance with max_steps=15
+new_agent = Agent(max_steps=15)
 
-# The executed tool call and its output should appear in context
-for entry in state.context:
-    if entry.get("type") in ("function_call", "function_call_output"):
-        print(entry)
+# Call new_agent.run() with the intermediate_state and store in final_state
+final_state = new_agent.run(intermediate_state)
 
-# The LLM should have queued new pending calls for the next step
-print(f"New pending tool calls: {len(state.pending_tool_calls)}")
+# Print the final_state using .model_dump_json(indent=2)
+print("Final state: ")
+print(final_state.model_dump_json(indent=2))
