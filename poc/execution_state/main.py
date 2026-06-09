@@ -4,26 +4,37 @@ from core.models.state import State
 
 agent = Agent()
 
-# Replace this plain context list with a State instance.
-# Use str(uuid.uuid4()) for the id field.
-# Put the user message dictionary inside the context field.
-# Leave steps and status unset so their defaults apply.
-initial_state = State(
+state = State(
     id=str(uuid.uuid4()),
     context=[
         {
             "role": "user",
-            "content": "Solve the root of this equation: x^2 - 5x + 6 = 0"
+            "content": "What is 2 + 3?"
         }
-    ],
-    status="running"
+    ]
 )
 
-# Change this to state = agent.run(state)
-state = agent.run(initial_state)
+# Seed a mock tool call to verify deferred execution
+state.pending_tool_calls = [
+    {
+        "name": "sum_numbers",
+        "arguments": {"a": 2, "b": 3},
+        "call_id": "call_1",
+        "type": "function_call"
+    }
+]
 
-# Print state.status.
-# If state.status is "failed", print state.error.
-# Otherwise, if state.final_answer is present, print it.
+# Run one step — the seeded call should be executed first, then the LLM queues new calls
+state = agent._next_step(state)
+
+# Verify the deferred execution worked
+print(f"Steps: {state.steps}")
 print(f"Status: {state.status}")
-print(f"Final answer: {state.final_answer}")
+
+# The executed tool call and its output should appear in context
+for entry in state.context:
+    if entry.get("type") in ("function_call", "function_call_output"):
+        print(entry)
+
+# The LLM should have queued new pending calls for the next step
+print(f"New pending tool calls: {len(state.pending_tool_calls)}")
