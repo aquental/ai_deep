@@ -4,30 +4,25 @@ import requests
 
 BASE_URL = "http://localhost:8000"
 
-# 1. Launch an agent
+# Launch the agent
 response = requests.post(
     f"{BASE_URL}/agent/launch",
-    json={"input_prompt": "What is 2 + 2?"}
+    json={"input_prompt": "Solve the root of this equation: x^2 - 5x + 6 = 0"}
 )
-response.raise_for_status()
 state = response.json()
 print(f"Launched agent with ID: {state['id']}")
-print(f"Initial status: {state['status']}")
 
-# 2. Poll until the agent reaches a terminal status
-print("\nPolling for progress...")
+# Poll until the agent completes
 while True:
-    time.sleep(1)
     response = requests.get(f"{BASE_URL}/agent/state/{state['id']}")
-    response.raise_for_status()
-    current = response.json()
+    current_state = response.json()
 
-    print(f"Status: {current['status']} | Steps: {current['steps']}")
+    # Display current progress at every polling step
+    print(f"Status: {current_state['status']} | Steps: {current_state['steps']} | Pending tool calls: {current_state['pending_tool_calls']}")
 
-    if current["status"] in ("complete", "max_steps_reached", "failed"):
+    if current_state['status'] in ["complete", "max_steps_reached", "failed"]:
+        print("\nFinal State:")
+        print(json.dumps(current_state, indent=2))
         break
-
-# 3. Display the final result
-print(f"\nFinal status: {current['status']}")
-print(f"Final answer: {current.get('final_answer')}")
-print(f"Total steps: {current['steps']}")
+    
+    time.sleep(1)

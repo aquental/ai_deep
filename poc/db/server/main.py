@@ -1,5 +1,5 @@
 import uuid
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 
 from core.models.state import State
@@ -7,7 +7,7 @@ from core.agent import Agent
 from server.database import get_db_session, StateModel, pydantic_to_db, db_to_pydantic
 
 # Create agent
-agent = Agent()
+agent = Agent(max_steps=10)
 
 app = FastAPI()
 
@@ -15,33 +15,7 @@ app = FastAPI()
 class LaunchRequest(BaseModel):
     input_prompt: str
 
-
-def _run_agent_in_background(state_id: str):
-    """Run the agent in a background thread and update the database"""
-    # Load the initial state from the database
-    with get_db_session() as session:
-        db_state = session.query(StateModel).filter(
-            StateModel.id == state_id).first()
-        if not db_state:
-            return
-        # Convert to Pydantic for the agent
-        working_state = db_to_pydantic(db_state)
-
-    # Run the agent with a callback that saves progress after every step
-    save_progress = _create_progress_callback(state_id)
-    final_state = agent.run(working_state, progress_callback=save_progress)
-
-    # Perform a final save to guarantee the terminal state is persisted
-    with get_db_session() as session:
-        db_state = session.query(StateModel).filter(
-            StateModel.id == state_id).first()
-        if db_state:
-            db_state.steps = final_state.steps
-            db_state.status = final_state.status
-            db_state.context = final_state.context
-            db_state.pending_tool_calls = final_state.pending_tool_calls
-            db_state.error = final_state.error
-            db_state.final_answer = final_state.final_answer
+# Implement _create_progress_callback(state_id: str)
 
 
 def _create_progress_callback(state_id: str):
@@ -62,6 +36,32 @@ def _create_progress_callback(state_id: str):
     return save_progress
 
 
+def _run_agent_in_background(state_id: str):
+    """Run the agent in a background thread and update the database"""
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == state_id).first()
+        if not db_state:
+            return
+        working_state = db_to_pydantic(db_state)
+
+    # Create a progress callback by calling _create_progress_callback(state_id)
+    save_progress = _create_progress_callback(state_id)
+    # Run the agent with agent.run(working_state, progress_callback=save_progress)
+    final_state = agent.run(working_state, progress_callback=save_progress)
+
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == state_id).first()
+        if db_state:
+            db_state.steps = final_state.steps
+            db_state.status = final_state.status
+            db_state.context = final_state.context
+            db_state.pending_tool_calls = final_state.pending_tool_calls
+            db_state.error = final_state.error
+            db_state.final_answer = final_state.final_answer
+
+
 @app.post("/agent/launch", response_model=State)
 def agent_launch(payload: LaunchRequest, background_tasks: BackgroundTasks):
     """Launch a new agent workflow"""
@@ -76,12 +76,10 @@ def agent_launch(payload: LaunchRequest, background_tasks: BackgroundTasks):
         status="running"
     )
 
-    # Persist to database
     with get_db_session() as session:
         db_state = pydantic_to_db(initial_state)
         session.add(db_state)
 
-    # Run agent in background (non-blocking)
     background_tasks.add_task(_run_agent_in_background, initial_state.id)
 
     return initial_state
@@ -94,5 +92,6 @@ def get_state(state_id: str):
         db_state = session.query(StateModel).filter(
             StateModel.id == state_id).first()
         if not db_state:
+            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="State not found")
         return db_to_pydantic(db_state)

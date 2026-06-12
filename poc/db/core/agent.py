@@ -141,22 +141,38 @@ class Agent:
         state.pending_tool_calls.extend(function_call_dicts)
         return state
 
-    def run(self, state: State):
-        # Create a deep copy to avoid mutating the original
+    # Add an optional progress_callback parameter (default None) to this method
+    def run(self, state: State, progress_callback=None):
+        """Execute agent steps on a given state and persist progress."""
         state = state.model_copy(deep=True)
-
         state.status = "running"
         state.error = None
 
+        # Check if the agent is resuming (state.steps > 0)
+        is_resuming = state.steps > 0
+        # Calculate max_steps_allowed: (self.max_steps + state.steps) if resuming, else self.max_steps
+        max_steps_allowed = (
+            self.max_steps + state.steps) if is_resuming else self.max_steps
+
         try:
-            while state.status == "running" and state.steps < self.max_steps:
+            # Update the loop condition below to use max_steps_allowed instead of self.max_steps
+            while state.status == "running" and state.steps < max_steps_allowed:
                 state = self._next_step(state)
+                # If progress_callback was provided, call it with the current state
+                if progress_callback:
+                    progress_callback(state)  # Save state after each step
+
+            # Update the condition below to use max_steps_allowed instead of self.max_steps
+            if state.status == "running" and state.steps >= max_steps_allowed:
+                state.status = "max_steps_reached"
+
+            return state
         except Exception as e:
             state.status = "failed"
             state.error = str(e)
+            # Clear pending_tool_calls to an empty list
+            state.pending_tool_calls = []
+            # If progress_callback was provided, call it with the failed state
+            if progress_callback:
+                progress_callback(state)  # Save the failed state as well
             return state
-
-        if state.status == "running":
-            state.status = "max_steps_reached"
-
-        return state
