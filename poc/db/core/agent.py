@@ -1,178 +1,224 @@
 import json
-import openai
-from pathlib import Path
-from typing import List, Any
+import uuid
+from fastapi import FastAPI, BackgroundTasks, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 
 from core.models.state import State
-from core.tools.functions.math import (
-    sum_numbers,
-    multiply_numbers,
-    subtract_numbers,
-    divide_numbers,
-    power,
-    square_root
-)
-from core.utils.context_serializer import serialize_context_to_text
+from core.agent import Agent
+from server.database import get_db_session, StateModel, pydantic_to_db, db_to_pydantic
+
+agent = Agent()
+
+app = FastAPI()
 
 
-class Agent:
-    def __init__(
-        self,
-        model: str = "gpt-5",
-        reasoning_effort: str = "low",
-        extra_instructions: str = "",
-        max_steps: int = 10
-    ):
-        self.model = model
-        self.reasoning_effort = reasoning_effort
-        self.max_steps = max_steps
+class LaunchRequest(BaseModel):
+    input_prompt: str
 
-        prompt_path = Path(__file__).resolve().parent / \
-            "prompts" / "base_system.md"
-        self.system_prompt = prompt_path.read_text(
-            encoding="utf-8") + extra_instructions
 
-        schemas_dir = Path(__file__).resolve().parent / "tools" / "schemas"
-        with open(schemas_dir / "math.json", "r", encoding="utf-8") as f:
-            math_schemas = json.load(f)
-        with open(schemas_dir / "final_answer.json", "r", encoding="utf-8") as f:
-            final_answer_schema = json.load(f)
+class PauseRequest(BaseModel):
+    id: str
 
-        self.tool_schemas = [
-            *math_schemas,
-            final_answer_schema
-        ]
 
-    def _call_llm(self, context: List[Any]):
-        serialized_content = serialize_context_to_text(context)
-        response = openai.responses.create(
-            model=self.model,
-            instructions=self.system_prompt,
-            input=serialized_content,
-            tools=self.tool_schemas,
-            tool_choice="required",
-            reasoning={
-                "effort": self.reasoning_effort} if self.model == "gpt-5" else None
-        )
-        return response
+class ResumeRequest(BaseModel):
+    id: str
 
-    def _next_step(self, state: State):
-        state.steps += 1
 
-        for function_call in list(state.pending_tool_calls):
-            call_name = function_call["name"]
-            call_arguments = function_call["arguments"]
-            call_id = function_call["call_id"]
+# Add a ProvideInputRequest model with two fields:
+#   - id: str
+#   - answer: str
+class ProvideInputRequest(BaseModel):
+    id: str
+    answer: str
 
-            state.context.append({
-                "type": "function_call",
-                "name": call_name,
-                "arguments": json.dumps(call_arguments),
-                "call_id": call_id
-            })
 
-            match call_name:
-                case "final_answer":
-                    state.pending_tool_calls = []
-                    state.status = "complete"
-                    state.final_answer = call_arguments.get("answer")
-                    return state
-                case "sum_numbers":
-                    try:
-                        result = sum_numbers(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case "multiply_numbers":
-                    try:
-                        result = multiply_numbers(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case "subtract_numbers":
-                    try:
-                        result = subtract_numbers(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case "divide_numbers":
-                    try:
-                        result = divide_numbers(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case "power":
-                    try:
-                        result = power(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case "square_root":
-                    try:
-                        result = square_root(**call_arguments)
-                        output = json.dumps({"result": result})
-                    except Exception as e:
-                        output = json.dumps({"result": f"Error: {str(e)}"})
-                case _:
-                    output = json.dumps(
-                        {"result": f"Error: Tool {call_name} not found"})
+def _create_progress_callback(state_id: str):
+    """Create a progress callback function that saves state after each step"""
+    def save_progress(state: State):
+        with get_db_session() as session:
+            db_state = session.query(StateModel).filter(
+                StateModel.id == state_id).first()
+            if db_state:
+                # Check if status was changed to "paused" externally (via pause endpoint)
+                if db_state.status == "paused":
+                    # Update local state to paused so agent loop will exit
+                    state.status = "paused"
+                    # Don't overwrite the paused status - just save other fields
+                    db_state.steps = state.steps
+                    db_state.context = state.context
+                    db_state.pending_tool_calls = state.pending_tool_calls
+                    db_state.error = state.error
+                    db_state.final_answer = state.final_answer
+                else:
+                    # Normal save - update all fields including status
+                    db_state.steps = state.steps
+                    db_state.status = state.status
+                    db_state.context = state.context
+                    db_state.pending_tool_calls = state.pending_tool_calls
+                    db_state.error = state.error
+                    db_state.final_answer = state.final_answer
+    return save_progress
 
-            state.pending_tool_calls.remove(function_call)
-            state.context.append({
-                "type": "function_call_output",
-                "call_id": call_id,
-                "output": output
-            })
 
-        response = self._call_llm(state.context)
-        function_calls = [
-            item for item in response.output if item.type == "function_call"]
+# Add a helper function _get_call_id_from_state(state: State) -> Optional[str]
+#   - Iterate backward through state.context
+#   - Return the call_id of the first item where:
+#       type == "function_call" and name == "ask_human"
+#   - Return None if no match is found
+def _get_call_id_from_state(state: State) -> Optional[str]:
+    """Extract the call_id from the last ask_human call in context"""
+    # Search backwards through context to find the most recent ask_human call
+    # We need the call_id to match the human's response with the original call
+    for item in reversed(state.context):
+        if isinstance(item, dict) and item.get("type") == "function_call" and item.get("name") == "ask_human":
+            return item.get("call_id")
+    return None
 
-        function_call_dicts = [
+
+def _run_agent_in_background(state_id: str, working_state: Optional[State] = None):
+    """Run the agent in a background thread and update the database"""
+    # If working_state not provided, load from database
+    if working_state is None:
+        with get_db_session() as session:
+            db_state = session.query(StateModel).filter(
+                StateModel.id == state_id).first()
+            if not db_state:
+                return
+            db_state.status = "running"
+            working_state = db_to_pydantic(db_state)
+    else:
+        # working_state provided (for resume), ensure DB status is running
+        with get_db_session() as session:
+            db_state = session.query(StateModel).filter(
+                StateModel.id == state_id).first()
+            if db_state:
+                db_state.status = "running"
+
+    # Run agent with progress callback
+    save_progress = _create_progress_callback(state_id)
+    final_state = agent.run(working_state, progress_callback=save_progress)
+
+    # Final update
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == state_id).first()
+        if db_state:
+            db_state.steps = final_state.steps
+            db_state.status = final_state.status
+            db_state.context = final_state.context
+            db_state.pending_tool_calls = final_state.pending_tool_calls
+            db_state.error = final_state.error
+            db_state.final_answer = final_state.final_answer
+
+
+@app.post("/agent/launch", response_model=State)
+def agent_launch(payload: LaunchRequest, background_tasks: BackgroundTasks):
+    """Launch a new agent workflow"""
+    initial_state = State(
+        id=str(uuid.uuid4()),
+        context=[
             {
-                "name": fc.name,
-                "arguments": json.loads(fc.arguments),
-                "call_id": fc.call_id,
-                "type": fc.type
+                "role": "user",
+                "content": payload.input_prompt
             }
-            for fc in function_calls
-        ]
+        ],
+        status="running"
+    )
 
-        state.pending_tool_calls.extend(function_call_dicts)
-        return state
+    with get_db_session() as session:
+        db_state = pydantic_to_db(initial_state)
+        session.add(db_state)
 
-    # Add an optional progress_callback parameter (default None) to this method
-    def run(self, state: State, progress_callback=None):
-        """Execute agent steps on a given state and persist progress."""
-        state = state.model_copy(deep=True)
-        state.status = "running"
-        state.error = None
+    background_tasks.add_task(_run_agent_in_background, initial_state.id)
+    return initial_state
 
-        # Check if the agent is resuming (state.steps > 0)
-        is_resuming = state.steps > 0
-        # Calculate max_steps_allowed: (self.max_steps + state.steps) if resuming, else self.max_steps
-        max_steps_allowed = (
-            self.max_steps + state.steps) if is_resuming else self.max_steps
 
-        try:
-            # Update the loop condition below to use max_steps_allowed instead of self.max_steps
-            while state.status == "running" and state.steps < max_steps_allowed:
-                state = self._next_step(state)
-                # If progress_callback was provided, call it with the current state
-                if progress_callback:
-                    progress_callback(state)  # Save state after each step
+@app.get("/agent/state/{state_id}", response_model=State)
+def get_state(state_id: str):
+    """Get the current state by ID"""
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == state_id).first()
+        if not db_state:
+            raise HTTPException(status_code=404, detail="State not found")
+        return db_to_pydantic(db_state)
 
-            # Update the condition below to use max_steps_allowed instead of self.max_steps
-            if state.status == "running" and state.steps >= max_steps_allowed:
-                state.status = "max_steps_reached"
 
-            return state
-        except Exception as e:
-            state.status = "failed"
-            state.error = str(e)
-            # Clear pending_tool_calls to an empty list
-            state.pending_tool_calls = []
-            # If progress_callback was provided, call it with the failed state
-            if progress_callback:
-                progress_callback(state)  # Save the failed state as well
-            return state
+@app.post("/agent/pause", response_model=State)
+def agent_pause(payload: PauseRequest):
+    """Pause a running agent workflow"""
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == payload.id).first()
+        if not db_state:
+            raise HTTPException(status_code=404, detail="State not found")
+
+        if db_state.status != "running":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot pause agent. Current status: {db_state.status}"
+            )
+
+        db_state.status = "paused"
+
+        return db_to_pydantic(db_state)
+
+
+@app.post("/agent/resume", response_model=State)
+def agent_resume(payload: ResumeRequest, background_tasks: BackgroundTasks):
+    """Resume a paused or interrupted workflow"""
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == payload.id).first()
+        if not db_state:
+            raise HTTPException(status_code=404, detail="State not found")
+
+        if db_state.status == "running":
+            raise HTTPException(
+                status_code=409, detail="Agent is already running")
+
+        # If db_state.status is "waiting_human_input", raise an HTTPException
+        # with status_code=400 and detail="Agent is waiting for human input"
+        if db_state.status == "waiting_human_input":
+            raise HTTPException(
+                status_code=400, detail="Agent is waiting for human input")
+
+        db_state.status = "running"
+
+        working_state = db_to_pydantic(db_state)
+
+    background_tasks.add_task(_run_agent_in_background,
+                              payload.id, working_state)
+
+    return working_state
+
+# Add a POST /agent/provide_input route that accepts a ProvideInputRequest
+#   1. Loads the state by payload.id — return 404 if not found
+#   2. Verifies state.status == "waiting_human_input" — return 400 otherwise
+#   3. Calls _get_call_id_from_state to get the call_id — return 400 if missing
+#   4. Appends a function_call_output entry to context:
+#       { "type": "function_call_output", "call_id": <call_id>, "output": json.dumps({"answer": payload.answer}) }
+#   5. Sets state.status back to "running"
+#   6. Update db_state.context and db_state.status with the new values
+#   7. Schedules _run_agent_in_background as a background task and returns the state
+
+
+@app.post("/agent/provide_input", response_model=State)
+def provide_input(payload: ProvideInputRequest, background_tasks: BackgroundTasks):
+    """Provide human input to a state waiting for human input and resume execution"""
+    with get_db_session() as session:
+        db_state = session.query(StateModel).filter(
+            StateModel.id == payload.id).first()
+        if not db_state:
+            raise HTTPException(status_code=404, detail="State not found")
+
+        # Check status while still in session
+        if db_state.status != "waiting_human_input":
+            raise HTTPException(
+                status_code=400,
+                detail=f"State is not waiting for human input. Current status: {db_state.status}"
+            )
+
+        # Convert to Pydantic while still in session
+        working_state = db_to_pydantic(db_state)
